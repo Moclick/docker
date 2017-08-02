@@ -1,0 +1,54 @@
+version: '3'
+
+services:
+  pxc:
+    image: percona/percona-xtradb-cluster
+    ports:
+      - "3306:3306"
+    deploy:
+      replicas: 3
+    depends_on:
+      - etcd
+    volumes:
+      - "/usr/local/data:/var/lib/mysql"
+    environment:
+      - MYSQL_ROOT_PASSWORD=mypassword
+      - ETCD_HOST=etcd:2379
+      - DISCOVERY_SERVICE=etcd:2379
+      - XTRABACKUP_PASSWORD=mypassword
+      - CLUSTER_NAME=galera
+    networks:
+      - mynet
+  registrator:
+    container_name: registrator
+    command: etcd://etcd:4001
+    image: gliderlabs/registrator:latest
+    volumes:
+      - "/var/run/docker.sock:/tmp/docker.sock"
+    depends_on:
+      - etcd
+    networks:
+      -  mynet
+  etcd:
+    image: quay.io/coreos/etcd
+    ports:
+      - "2379:2379"
+      - "4001:4001"
+      - "4100:4100"
+      - "7001:7001"
+    environment:environment:
+      - advertise-client-urls=http://etcd:2379,http://etcd:4001
+      - listen-client-urls=http://0.0.0.0:2379,http://0.0.0.0:4001
+      - initial-advertise-peer-urls=http://etcd:2380
+      - listen-peer-urls=http://0.0.0.0:2380
+      - initial-cluster-token=etcd-cluster-1
+      - initial-cluster='etcd0=http://etcd:2380'
+      - initial-cluster-state=new
+    command: sh -c "timeout -t 2 /usr/local/bin/etcd ;/usr/local/bin/etcd --advertise-client-urls=http://etcd:2379,http://etcd:4001 --listen-client-urls=http://0.0.0.0:2379,http://0.0.0.0:4001 --initial-advertise-peer-urls=http://etcd:2380 --listen-peer-urls 'http://0.0.0.0:2380' --initial-cluster-token='etcd-cluster-1' --initial-cluster='etcd0=http://etcd:2380' --initial-cluster-state=new"
+    deploy:
+      replicas: 1
+    networks:
+      - mynet
+networks:
+    mynet:
+      driver: overlay
